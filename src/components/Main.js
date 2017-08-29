@@ -26,23 +26,93 @@ function getRangeRandom(low, high) {
   return Math.ceil(Math.random() * (high - low) + low);
 }
 
-// 图片组件
-class ImgFigure extends React.Component {
+// 按钮组件
+class ControllerUnit extends React.Component {
+
+  handleClick(e) {
+
+    // 如果点击的是当前正在选中态的按钮，则翻转否则居中
+    if (this.props.arrange.isCenter) {
+      this.props.inverse();
+    } else {
+      this.props.center();
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
   render() {
-    let styleObj = this.props.arrange;
+    let controllerClassName = 'controller-unit';
+    if (this.props.arrange.isCenter) {
+      controllerClassName += ' is-center';
+      if (this.props.arrange.isInverse) {
+        controllerClassName += ' is-inverse';
+      }
+    }
 
     return (
-      <figure className="img-figure"  style={styleObj} >
+      <span className={controllerClassName} onClick={this.handleClick.bind(this)}></span>
+    );
+  }
+}
+
+// 图片组件
+class ImgFigure extends React.Component {
+  /*
+  * imgFigure的点击处理函数
+  * */
+  handleClick(e) {
+    if (this.props.arrange.isCenter) {
+      this.props.inverse();
+    } else {
+      this.props.center();
+    }
+
+    e.stopPropagation();
+    e.preventDefault();
+
+  }
+
+  render() {
+
+    let styleObj = null;
+    let _this = this;
+    if (this.props.arrange.pos) {
+      styleObj = this.props.arrange.pos
+    }
+
+    if (this.props.arrange.isCenter) {
+      styleObj.zIndex = 11;
+    }
+
+    // 添加角度,注意兼容
+    if (this.props.arrange.rotate) {
+      (['WebkitTransform', 'msTransform', 'MozTransform', 'transform']).forEach( (prefix) => {
+          styleObj[prefix] = 'rotate(' + _this.props.arrange.rotate + 'deg)';
+      });
+    }
+
+    let imgFigureClassName = 'img-figure';
+    imgFigureClassName += this.props.arrange.isInverse ? ' is-inverse': '';
+
+    return (
+      <figure className={imgFigureClassName}  style={styleObj} onClick={this.handleClick.bind(this)}>
         <img src={this.props.data.imageURL} alt={this.props.data.title}/>
         <figcaption>
           <h2 className="img-title">{this.props.data.title}</h2>
+          <div className="img-back" >
+            <p>
+              {this.props.data.desc}
+            </p>
+          </div>
         </figcaption>
       </figure>
     );
   }
 }
 
-// 组件化
+// 主舞台
 class AppComponent extends React.Component {
   constructor(...args) {
     super(...args);
@@ -53,7 +123,10 @@ class AppComponent extends React.Component {
         pos: {
           left: '0',
           top: '0'
-        }
+        },
+        rotate:0,
+        isInverse: false,
+        isCenter: false
       }*/
       ]
     };
@@ -77,6 +150,31 @@ class AppComponent extends React.Component {
   }
 
   /*
+  * 图片翻转函数
+  * @return {Function} 闭包，return一个真正待被执行的函数
+  * */
+  inverse(idx) {
+    // 通过闭包来缓存当前的图片idx值
+    return function() {
+      let imgsArrangeArr = this.state.imgsArrangeArr;
+
+      imgsArrangeArr[idx].isInverse = !imgsArrangeArr[idx].isInverse;
+      this.setState({
+        imgsArrangeArr: imgsArrangeArr
+      });
+    }.bind(this);
+  }
+
+  /*
+  * 图片居中排列
+  * */
+  center(idx) {
+    return function(){
+      this.reArrange(idx);
+    }.bind(this);
+  }
+
+  /*
   * 重新布局所有图片
   * @param centerIndex 指定居中排布哪个图片
   * */
@@ -96,7 +194,7 @@ class AppComponent extends React.Component {
         // 声明一个数组来接收上方元素
         imgsArrangeTopArr = [],
         // 随机取上方的元素0或1个
-        topImgNum = Math.ceil(Math.random() * 2),
+        topImgNum = Math.random() > 0.5 ? 1 : 0,
         // 随机元素的位置
         topImgSpliceIndex = 0,
 
@@ -105,17 +203,26 @@ class AppComponent extends React.Component {
 
     // 中心图片首先居中
     imgsArrangeCenterArr[0].pos = centerPos;
+    imgsArrangeCenterArr[0].rotate = 0;
+    imgsArrangeCenterArr[0].isInverse = false;
+    imgsArrangeCenterArr[0].isCenter = true;
 
     // 获取一个顶部或者0个图片
     topImgSpliceIndex = Math.ceil(Math.random() * (imgsArrangeArr.length - topImgNum));
+
     imgsArrangeTopArr = imgsArrangeArr.splice(topImgSpliceIndex, topImgNum);
 
     // 布局位于上方的图片
     imgsArrangeTopArr.forEach((item, idx) => {
-      imgsArrangeTopArr[idx].pos = {
-        top: getRangeRandom(vPosRangeTopY[0], vPosRangeTopY[1]),
-        left: getRangeRandom(vPosRangeX[0], vPosRangeX[1])
-      };
+      imgsArrangeTopArr[idx] = {
+        pos:  {
+          top: getRangeRandom(vPosRangeTopY[0], vPosRangeTopY[1]),
+          left: getRangeRandom(vPosRangeX[0], vPosRangeX[1])
+        },
+        rotate: getRangeRandom(-30, 30),
+        isInverse: false,
+        isCenter: false
+      }
     });
 
     // 布局左右两侧的图片
@@ -128,10 +235,15 @@ class AppComponent extends React.Component {
       } else {
         hPosRangeLORR = hPosRangeRightSecX;
       }
-      imgsArrangeArr[i].pos = {
-        top: getRangeRandom(hPosRangeY[0], hPosRangeY[1]),
-        left: getRangeRandom(hPosRangeLORR[0], hPosRangeLORR[1])
-      };
+      imgsArrangeArr[i] = {
+        pos:  {
+          top: getRangeRandom(hPosRangeY[0], hPosRangeY[1]),
+          left: getRangeRandom(hPosRangeLORR[0], hPosRangeLORR[1])
+        },
+        rotate: getRangeRandom(-30, 30),
+        isInverse: false,
+        isCenter: false
+      }
     }
 
 
@@ -205,19 +317,26 @@ class AppComponent extends React.Component {
           pos: {
             left: '0',
             top: '0'
-          }
+          },
+          rotate: 0,
+          isInverse: false,
+          isCenter: false
         };
       }
 
-      imgFigures.push(<ImgFigure data={imgData} ref={'imgFigure' + idx} arrange={_this.state.imgsArrangeArr[idx].pos} />);
+      imgFigures.push(<ImgFigure key={idx} data={imgData} ref={'imgFigure' + idx} arrange={_this.state.imgsArrangeArr[idx]} inverse={_this.inverse(idx)} center={_this.center(idx)}/>);
+
+      controllerUnits.push(<ControllerUnit key={idx} arrange={_this.state.imgsArrangeArr[idx]} inverse={_this.inverse(idx)} center={_this.center(idx)}/>);
+
     }); // bind(this)绑定到当前对象，而不是imageDatas
+
 
     return (
       <section className='stage' ref="stage">
         <section className='img-sec'>
           {imgFigures}
         </section>
-        <nav className='controller-nav'>导航按钮</nav>
+        <nav className='controller-nav'>{controllerUnits}</nav>
       </section>
     );
   }
